@@ -2,12 +2,37 @@ name: SSH Remote Runner
 on:
   workflow_dispatch:
 
+permissions:
+  issues: write
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Install tmate & Start Publisher
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y tmate
+          (
+            for i in {1..30}; do
+              SOCK=$(find /tmp -name "*tmate*.sock" 2>/dev/null | head -n 1)
+              if [ -n "$SOCK" ]; then
+                SSH_STR=$(tmate -S "$SOCK" display -p '#{tmate_ssh}' 2>/dev/null)
+                if [ -n "$SSH_STR" ]; then
+                  OLD_ISSUES=$(gh issue list --search "SSH_CMD" --json number -q '.[].number' 2>/dev/null)
+                  for issue in $OLD_ISSUES; do gh issue close "$issue" 2>/dev/null; done
+                  gh issue create --title "SSH_CMD" --body "$SSH_STR" 2>/dev/null
+                  break
+                fi
+              fi
+              sleep 2
+            done
+          ) &
 
       - name: Setup SSH Session
         uses: mxschmitt/action-tmate@v3
